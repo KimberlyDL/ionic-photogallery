@@ -102,7 +102,7 @@ jobs:
       # ----------------------------------------------------------
       - name: ionic-calculator.apk
         run: |
-          cp android/app/build/outputs/apk/debug/app-debug.apk IonicCalculator.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk GalleryGo.apk
 
 
       # ----------------------------------------------------------
@@ -111,7 +111,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: IonicCalculator-APK
-          path: IonicCalculator.apk
+          name: GalleryGo-APK
+          path: GalleryGo.apk
           if-no-files-found: error
           retention-days: 30
