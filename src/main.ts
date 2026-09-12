@@ -2,9 +2,18 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router';
 
+
 // Catch anything that would otherwise leave a silent blank screen (a native app
 // has no browser dev console visible by default) and render it on-screen instead.
+let hasMounted = false;
+
 const renderCrashScreen = (title: string, detail: string) => {
+  if (hasMounted) {
+    // The app is already up and running; a post-mount error here is a runtime
+    // hiccup, not a startup failure, so don't tear down a working UI over it.
+    console.error(`[${title}]`, detail);
+    return;
+  }
   const el = document.getElementById('app') ?? document.body;
   el.innerHTML = `
     <div style="padding:20px;font-family:sans-serif;background:#fff;color:#b00020;">
@@ -71,6 +80,7 @@ app.config.errorHandler = (err) => {
 router.isReady()
   .then(() => {
     app.mount('#app');
+    hasMounted = true;
   })
   .catch((err) => {
     renderCrashScreen('App failed to start', String(err));
