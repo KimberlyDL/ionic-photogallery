@@ -2,6 +2,30 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router';
 
+// Catch anything that would otherwise leave a silent blank screen (a native app
+// has no browser dev console visible by default) and render it on-screen instead.
+const renderCrashScreen = (title: string, detail: string) => {
+  const el = document.getElementById('app') ?? document.body;
+  el.innerHTML = `
+    <div style="padding:20px;font-family:sans-serif;background:#fff;color:#b00020;">
+      <h2 style="margin-top:0;">${title}</h2>
+      <pre style="white-space:pre-wrap;word-break:break-word;font-size:12px;color:#333;">${detail}</pre>
+    </div>
+  `;
+};
+
+window.addEventListener('error', (event) => {
+  renderCrashScreen('App crashed', `${event.message}\n${event.error?.stack ?? ''}`);
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event.reason as { message?: string; stack?: string } | undefined;
+  renderCrashScreen(
+    'App failed to start',
+    `${reason?.message ?? String(event.reason)}\n${reason?.stack ?? ''}`
+  );
+});
+
 import { IonicVue } from '@ionic/vue';
 
 /* Core CSS required for Ionic components to work properly */
@@ -40,6 +64,14 @@ const app = createApp(App)
   .use(IonicVue)
   .use(router);
 
-router.isReady().then(() => {
-  app.mount('#app');
-});
+app.config.errorHandler = (err) => {
+  renderCrashScreen('App crashed', String(err));
+};
+
+router.isReady()
+  .then(() => {
+    app.mount('#app');
+  })
+  .catch((err) => {
+    renderCrashScreen('App failed to start', String(err));
+  });
