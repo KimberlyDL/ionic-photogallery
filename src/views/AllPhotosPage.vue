@@ -1,7 +1,7 @@
 <template>
   <ion-page>
     <ion-header>
-      <ion-toolbar color="primary">
+      <ion-toolbar>
         <ion-title>
           All Photos
           <span class="header-count">{{ galleryPhotos.length }}</span>
@@ -53,9 +53,12 @@ const handleRefresh = (event: RefresherCustomEvent) => {
 
 <style scoped>
 .header-count {
-  font-size: 13px;
-  font-weight: normal;
-  opacity: 0.8;
+  font-size: 12px;
+  font-weight: 600;
   margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ion-color-primary) 12%, transparent);
+  color: var(--ion-color-primary);
 }
 </style>

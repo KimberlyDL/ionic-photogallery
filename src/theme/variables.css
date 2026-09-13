@@ -1,2 +1,62 @@
-/* For information on how to create your own theme, please refer to:
-http://ionicframework.com/docs/theming/ */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+/* ---------------------------------------------------------------
+   Design tokens for this app.
+   Ionic's own dark palette (imported before this file in main.ts)
+   sets most --ion-color-* roles via a plain `:root` selector inside
+   a prefers-color-scheme:dark media query. Because this file loads
+   after it, unqualified `:root` rules below win the cascade in BOTH
+   light and dark mode - so the accent color stays consistent across
+   themes without needing a separate dark override block for it.
+   ----------------------------------------------------------------- */
+:root {
+  --ion-font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  /* Accent: warm coral/terracotta, replacing Ionic's default blue */
+  --ion-color-primary: #e15a3d;
+  --ion-color-primary-rgb: 225, 90, 61;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #c64f36;
+  --ion-color-primary-tint: #e67359;
+
+  /* App-specific design tokens used across components */
+  --app-radius-sm: 8px;
+  --app-radius-md: 12px;
+  --app-radius-lg: 16px;
+  --app-shadow-card: 0 1px 2px rgba(20, 15, 10, 0.05), 0 4px 14px rgba(20, 15, 10, 0.09);
+  --app-shadow-card-hover: 0 2px 4px rgba(20, 15, 10, 0.06), 0 6px 20px rgba(20, 15, 10, 0.12);
+}
+
+/* Light-mode surface tones: a warm off-white page with pure-white
+   cards, so elevated content actually has something to lift off of.
+   Dark mode keeps Ionic's own built-in dark surfaces (already a
+   sensible neutral dark palette) untouched. */
+:root {
+  --ion-background-color: #faf7f5;
+  --ion-background-color-rgb: 250, 247, 245;
+  --ion-text-color: #201c1a;
+  --ion-text-color-rgb: 32, 28, 26;
+  --ion-item-background: #ffffff;
+  --ion-toolbar-background: #ffffff;
+  --ion-card-background: #ffffff;
+}
+
+/* Reusable pill-style segment control (grid/list toggles) */
+.pill-segment {
+  --background: color-mix(in srgb, currentColor 6%, transparent);
+  border-radius: 999px;
+  padding: 3px;
+}
+
+.pill-segment ion-segment-button {
+  --border-radius: 999px;
+  --indicator-color: transparent;
+  --indicator-box-shadow: none;
+  --background-checked: var(--ion-color-primary);
+  --color-checked: var(--ion-color-primary-contrast);
+  --padding-start: 8px;
+  --padding-end: 8px;
+  min-width: 0;
+  min-height: 32px;
+}

@@ -2,7 +2,7 @@
   <div class="gallery-toolbar">
     <ion-searchbar v-model="search" placeholder="Search by name" class="gallery-search" />
     <div class="toolbar-row">
-      <ion-segment v-model="viewMode" class="gallery-segment">
+      <ion-segment v-model="viewMode" class="gallery-segment pill-segment">
         <ion-segment-button value="grid">
           <ion-icon :icon="gridOutline" />
         </ion-segment-button>
@@ -15,7 +15,12 @@
           <ion-icon slot="start" :icon="swapVerticalOutline" />
           {{ sortLabel }}
         </ion-button>
-        <ion-button fill="outline" size="small" @click="toggleSelectionMode">
+        <ion-button
+          :fill="selectionMode ? 'solid' : 'outline'"
+          :color="selectionMode ? 'primary' : undefined"
+          size="small"
+          @click="toggleSelectionMode"
+        >
           {{ selectionMode ? "Cancel" : "Select" }}
         </ion-button>
       </ion-buttons>
@@ -48,12 +53,23 @@
           @pointercancel="longPress.cancel()"
           @click="handleItemTap(photo)"
         >
-          <ion-img :src="photo.url" />
-          <div v-if="selectionMode" class="select-overlay">
-            <ion-icon
-              :icon="selectedIds.has(photo.id) ? checkmarkCircle : ellipseOutline"
-              :color="selectedIds.has(photo.id) ? 'primary' : 'light'"
-            />
+          <div class="grid-item-thumb">
+            <img :src="photo.url" loading="lazy" class="grid-item-img" />
+            <div v-if="selectionMode" class="select-overlay">
+              <ion-icon
+                :icon="selectedIds.has(photo.id) ? checkmarkCircle : ellipseOutline"
+                :color="selectedIds.has(photo.id) ? 'primary' : 'light'"
+              />
+            </div>
+            <ion-button
+              v-else
+              fill="clear"
+              class="grid-menu-button"
+              @pointerdown.stop
+              @click.stop="openItemMenu(photo)"
+            >
+              <ion-icon slot="icon-only" :icon="ellipsisVertical" />
+            </ion-button>
           </div>
           <div class="grid-item-name">{{ photo.name }}</div>
         </div>
@@ -66,6 +82,8 @@
       v-for="photo in pagedPhotos"
       :key="photo.id"
       button
+      lines="none"
+      class="photo-row"
       @pointerdown="longPress.start(photo)"
       @pointerup="longPress.cancel()"
       @pointerleave="longPress.cancel()"
@@ -85,6 +103,16 @@
         <h2>{{ photo.name }}</h2>
         <p>{{ formatDate(photo.createdAt) }} &middot; {{ formatBytes(photo.size) }}</p>
       </ion-label>
+      <ion-button
+        v-if="!selectionMode"
+        slot="end"
+        fill="clear"
+        class="row-menu-button"
+        @pointerdown.stop
+        @click.stop="openItemMenu(photo)"
+      >
+        <ion-icon slot="icon-only" :icon="ellipsisVertical" />
+      </ion-button>
     </ion-item>
   </ion-list>
 
@@ -112,15 +140,28 @@
         </ion-buttons>
         <ion-title class="viewer-title">{{ selectedPhoto?.name }}</ion-title>
         <ion-buttons slot="end">
-          <ion-button @click="openItemMenu">
+          <ion-button v-if="selectedPhoto" @click="openItemMenu(selectedPhoto)">
             <ion-icon slot="icon-only" :icon="ellipsisVertical" />
           </ion-button>
         </ion-buttons>
       </ion-toolbar>
     </ion-header>
     <ion-content class="viewer-content" v-if="selectedPhoto">
-      <div class="viewer-image-wrap">
-        <img :src="selectedPhoto.url" class="viewer-image" />
+      <div
+        ref="viewerWrapRef"
+        class="viewer-image-wrap"
+        @pointerdown="onViewerPointerDown"
+        @pointermove="onViewerPointerMove"
+        @pointerup="onViewerPointerUp"
+        @pointercancel="onViewerPointerUp"
+        @pointerleave="onViewerPointerUp"
+      >
+        <img
+          :src="selectedPhoto.url"
+          class="viewer-image"
+          :class="{ 'viewer-image-zoomed': zoomScale > 1 }"
+          :style="{ transform: `translate(${panX}px, ${panY}px) scale(${zoomScale})` }"
+        />
       </div>
     </ion-content>
   </ion-modal>
@@ -177,7 +218,6 @@ import {
   IonGrid,
   IonRow,
   IonCol,
-  IonImg,
   IonIcon,
   IonList,
   IonItem,
@@ -352,6 +392,114 @@ const closeViewer = () => {
   selectedPhotoId.value = null;
 };
 
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 4;
+const DOUBLE_TAP_ZOOM = 2.5;
+const DOUBLE_TAP_MAX_DELAY_MS = 300;
+const DOUBLE_TAP_MAX_DISTANCE_PX = 20;
+
+const viewerWrapRef = ref<HTMLDivElement | null>(null);
+const zoomScale = ref(1);
+const panX = ref(0);
+const panY = ref(0);
+
+const activePointers = new Map<number, { x: number; y: number }>();
+let pinchStartDistance = 0;
+let pinchStartScale = 1;
+let panOrigin = { x: 0, y: 0 };
+let panStart = { x: 0, y: 0 };
+let lastTap = { time: 0, x: 0, y: 0 };
+
+const pointerDistance = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+  Math.hypot(a.x - b.x, a.y - b.y);
+
+const resetZoom = () => {
+  zoomScale.value = 1;
+  panX.value = 0;
+  panY.value = 0;
+};
+
+watch(selectedPhotoId, resetZoom);
+
+const clampPan = () => {
+  const rect = viewerWrapRef.value?.getBoundingClientRect();
+  if (!rect) return;
+  const maxX = (rect.width * (zoomScale.value - 1)) / 2;
+  const maxY = (rect.height * (zoomScale.value - 1)) / 2;
+  panX.value = Math.min(maxX, Math.max(-maxX, panX.value));
+  panY.value = Math.min(maxY, Math.max(-maxY, panY.value));
+};
+
+const onViewerPointerDown = (event: PointerEvent) => {
+  activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+  if (activePointers.size === 2) {
+    const [a, b] = [...activePointers.values()];
+    pinchStartDistance = pointerDistance(a, b);
+    pinchStartScale = zoomScale.value;
+    return;
+  }
+
+  if (activePointers.size === 1) {
+    panStart = { x: event.clientX, y: event.clientY };
+    panOrigin = { x: panX.value, y: panY.value };
+
+    const now = Date.now();
+    const isDoubleTap =
+      now - lastTap.time < DOUBLE_TAP_MAX_DELAY_MS &&
+      pointerDistance(lastTap, { x: event.clientX, y: event.clientY }) < DOUBLE_TAP_MAX_DISTANCE_PX;
+
+    if (isDoubleTap) {
+      if (zoomScale.value > 1) {
+        resetZoom();
+      } else {
+        zoomScale.value = DOUBLE_TAP_ZOOM;
+      }
+      lastTap = { time: 0, x: 0, y: 0 };
+    } else {
+      lastTap = { time: now, x: event.clientX, y: event.clientY };
+    }
+  }
+};
+
+const onViewerPointerMove = (event: PointerEvent) => {
+  if (!activePointers.has(event.pointerId)) return;
+  activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+  if (activePointers.size === 2) {
+    const [a, b] = [...activePointers.values()];
+    if (pinchStartDistance > 0) {
+      const nextScale = pinchStartScale * (pointerDistance(a, b) / pinchStartDistance);
+      zoomScale.value = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextScale));
+      clampPan();
+    }
+    return;
+  }
+
+  if (activePointers.size === 1 && zoomScale.value > 1) {
+    const point = [...activePointers.values()][0];
+    panX.value = panOrigin.x + (point.x - panStart.x);
+    panY.value = panOrigin.y + (point.y - panStart.y);
+    clampPan();
+  }
+};
+
+const onViewerPointerUp = (event: PointerEvent) => {
+  activePointers.delete(event.pointerId);
+
+  if (zoomScale.value <= 1) {
+    resetZoom();
+    return;
+  }
+
+  const remaining = [...activePointers.entries()];
+  if (remaining.length === 1) {
+    const [, point] = remaining[0];
+    panStart = point;
+    panOrigin = { x: panX.value, y: panY.value };
+  }
+};
+
 const detailsPhoto = ref<{ photo: GalleryPhoto; width: number; height: number } | null>(null);
 
 const viewDetails = async (photo: GalleryPhoto) => {
@@ -400,10 +548,7 @@ const confirmDeleteOne = async (photo: GalleryPhoto) => {
   await sheet.present();
 };
 
-const openItemMenu = async () => {
-  const photo = selectedPhoto.value;
-  if (!photo) return;
-
+const openItemMenu = async (photo: GalleryPhoto) => {
   const sheet = await actionSheetController.create({
     header: photo.name,
     buttons: [
@@ -491,10 +636,63 @@ const handleBulkMove = async () => {
   border-radius: 8px;
 }
 
+.photo-row {
+  --border-radius: var(--app-radius-md);
+  margin: 6px 12px;
+  border-radius: var(--app-radius-md);
+  overflow: hidden;
+}
+
 .grid-item {
-  position: relative;
   user-select: none;
   -webkit-user-select: none;
+}
+
+.grid-item-thumb {
+  position: relative;
+  border-radius: var(--app-radius-md);
+  box-shadow: var(--app-shadow-card);
+  background: var(--ion-item-background);
+}
+
+.grid-item-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: inherit;
+}
+
+.grid-menu-button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  margin: 0;
+  --padding-start: 4px;
+  --padding-end: 4px;
+  --background: rgba(0, 0, 0, 0.45);
+  --background-hover: rgba(0, 0, 0, 0.6);
+  --border-radius: 50%;
+  --border-width: 1px;
+  --border-style: solid;
+  --border-color: rgba(255, 255, 255, 0.25);
+  --color: #fff;
+  width: 28px;
+  height: 28px;
+}
+
+.row-menu-button {
+  --background: color-mix(in srgb, currentColor 7%, transparent);
+  --background-hover: color-mix(in srgb, currentColor 14%, transparent);
+  --border-radius: 8px;
+  --border-width: 1px;
+  --border-style: solid;
+  --border-color: color-mix(in srgb, currentColor 18%, transparent);
+  --color: var(--ion-color-medium);
+  --padding-start: 6px;
+  --padding-end: 6px;
+  width: 32px;
+  height: 32px;
+  margin: 0;
 }
 
 .select-overlay {
@@ -507,7 +705,8 @@ const handleBulkMove = async () => {
 
 .grid-item-name {
   font-size: 12px;
-  padding: 2px 2px 0;
+  margin-top: 6px;
+  padding: 0 2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -541,11 +740,18 @@ const handleBulkMove = async () => {
   align-items: center;
   justify-content: center;
   min-height: 100%;
+  touch-action: none;
+  overflow: hidden;
 }
 
 .viewer-image {
   max-width: 100%;
   max-height: 100vh;
   object-fit: contain;
+  will-change: transform;
+}
+
+.viewer-image-zoomed {
+  cursor: grab;
 }
 </style>

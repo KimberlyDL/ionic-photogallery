@@ -76,12 +76,89 @@ const convertBlobToBase64 = (blob: Blob) =>
     reader.readAsDataURL(blob);
   });
 
+const loadImage = (src: string) =>
+  new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+
+const BLACK_BORDER_THRESHOLD = 12;
+
+// The web fallback camera (@ionic/pwa-elements) can pad captured frames with
+// solid black bars when the webcam's native aspect ratio doesn't match the
+// capture canvas. Trim any solid-black rows/columns from the outer edges
+// before saving so the stored photo matches what the camera actually saw.
+const cropBlackBorders = (image: HTMLImageElement): HTMLCanvasElement => {
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(image, 0, 0);
+
+  const { width, height } = canvas;
+  const { data } = ctx.getImageData(0, 0, width, height);
+
+  const isNearBlack = (i: number) =>
+    data[i] <= BLACK_BORDER_THRESHOLD &&
+    data[i + 1] <= BLACK_BORDER_THRESHOLD &&
+    data[i + 2] <= BLACK_BORDER_THRESHOLD;
+
+  const isBlackColumn = (x: number) => {
+    for (let y = 0; y < height; y++) {
+      if (!isNearBlack((y * width + x) * 4)) return false;
+    }
+    return true;
+  };
+  const isBlackRow = (y: number) => {
+    for (let x = 0; x < width; x++) {
+      if (!isNearBlack((y * width + x) * 4)) return false;
+    }
+    return true;
+  };
+
+  let left = 0;
+  while (left < width / 2 && isBlackColumn(left)) left++;
+  let right = width - 1;
+  while (right > width / 2 && isBlackColumn(right)) right--;
+  let top = 0;
+  while (top < height / 2 && isBlackRow(top)) top++;
+  let bottom = height - 1;
+  while (bottom > height / 2 && isBlackRow(bottom)) bottom--;
+
+  const cropWidth = right - left + 1;
+  const cropHeight = bottom - top + 1;
+  if (cropWidth === width && cropHeight === height) return canvas;
+
+  const cropped = document.createElement("canvas");
+  cropped.width = cropWidth;
+  cropped.height = cropHeight;
+  cropped
+    .getContext("2d")!
+    .drawImage(canvas, left, top, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+  return cropped;
+};
+
+const canvasToBase64 = (canvas: HTMLCanvasElement) =>
+  new Promise<string>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("Failed to encode image"));
+        return;
+      }
+      convertBlobToBase64(blob).then(resolve, reject);
+    }, "image/jpeg", 0.92);
+  });
+
 const pad = (n: number) => String(n).padStart(2, "0");
 
-const generateFileName = (date: Date) => {
-  const stamp = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(
+const buildTimestamp = (date: Date) =>
+  `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(
     date.getHours()
   )}${pad(date.getMinutes())}${pad(date.getSeconds())}${pad(date.getMilliseconds() % 100)}`;
+
+const generateFileName = (stamp: string) => {
   const uniqueSuffix = Math.floor(Math.random() * 900 + 100);
   return `IMG_${stamp}_${uniqueSuffix}.jpeg`;
 };
@@ -96,9 +173,9 @@ const saveImageFile = async (
     const file = await Filesystem.readFile({ path: photo.path! });
     base64Data = file.data as string;
   } else {
-    const response = await fetch(photo.webPath!);
-    const blob = await response.blob();
-    base64Data = await convertBlobToBase64(blob);
+    const image = await loadImage(photo.webPath!);
+    const cropped = cropBlackBorders(image);
+    base64Data = await canvasToBase64(cropped);
   }
 
   const savedFile = await Filesystem.writeFile({
@@ -137,14 +214,15 @@ export function usePhotoGallery() {
     });
 
     const now = new Date();
-    const fileName = generateFileName(now);
+    const stamp = buildTimestamp(now);
+    const fileName = generateFileName(stamp);
     const { filepath, size } = await saveImageFile(capturedPhoto, fileName);
 
     const newRef = push(dbRef(db, `photos/${uid}`));
     await set(newRef, {
       filepath,
       size,
-      name: now.toLocaleString(),
+      name: `IMG_${stamp}`,
       albumId: null,
       createdAt: now.getTime(),
     });

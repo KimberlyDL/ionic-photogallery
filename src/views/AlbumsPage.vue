@@ -1,16 +1,16 @@
 <template>
   <ion-page>
     <ion-header>
-      <ion-toolbar color="primary">
+      <ion-toolbar>
         <ion-title>Albums</ion-title>
         <ion-buttons slot="end">
-          <ion-button @click="promptCreateAlbum">
+          <ion-button color="primary" @click="promptCreateAlbum">
             <ion-icon slot="icon-only" :icon="addOutline" />
           </ion-button>
         </ion-buttons>
       </ion-toolbar>
       <ion-toolbar>
-        <ion-segment v-model="viewMode" class="albums-segment">
+        <ion-segment v-model="viewMode" class="albums-segment pill-segment">
           <ion-segment-button value="list">
             <ion-icon :icon="listOutline" />
           </ion-segment-button>
@@ -26,9 +26,9 @@
       </ion-refresher>
 
       <ion-list v-if="viewMode === 'list'">
-        <ion-item-sliding v-for="album in allAlbums" :key="album.id">
-          <ion-item button @click="openAlbum(album.id)">
-            <ion-thumbnail slot="start">
+        <ion-item-sliding v-for="album in allAlbums" :key="album.id" class="album-row">
+          <ion-item button lines="none" @click="openAlbum(album.id)">
+            <ion-thumbnail slot="start" class="album-list-thumb">
               <img v-if="albumThumbnail(album.id)" :src="albumThumbnail(album.id)" />
               <ion-icon v-else :icon="albumsOutline" class="thumb-placeholder" />
             </ion-thumbnail>
@@ -36,6 +36,15 @@
               <h2>{{ album.name }}</h2>
               <p>{{ photoCount(album.id) }} photo(s)</p>
             </ion-label>
+            <ion-button
+              v-if="!album.isDefault"
+              slot="end"
+              fill="clear"
+              class="row-menu-button"
+              @click.stop="openAlbumMenu(album)"
+            >
+              <ion-icon slot="icon-only" :icon="ellipsisVertical" />
+            </ion-button>
           </ion-item>
           <ion-item-options v-if="!album.isDefault" side="end">
             <ion-item-option @click="promptRenameAlbum(album)">Rename</ion-item-option>
@@ -60,6 +69,15 @@
               <div class="album-thumb">
                 <img v-if="albumThumbnail(album.id)" :src="albumThumbnail(album.id)" />
                 <ion-icon v-else :icon="albumsOutline" class="thumb-placeholder" />
+                <ion-button
+                  v-if="!album.isDefault"
+                  fill="clear"
+                  class="card-menu-button"
+                  @pointerdown.stop
+                  @click.stop="openAlbumMenu(album)"
+                >
+                  <ion-icon slot="icon-only" :icon="ellipsisVertical" />
+                </ion-button>
               </div>
               <div class="album-name">{{ album.name }}</div>
               <div class="album-count">{{ photoCount(album.id) }} photo(s)</div>
@@ -107,7 +125,13 @@ import {
 } from "@ionic/vue";
 import type { RefresherCustomEvent } from "@ionic/vue";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
-import { addOutline, albumsOutline, gridOutline, listOutline } from "ionicons/icons";
+import {
+  addOutline,
+  albumsOutline,
+  ellipsisVertical,
+  gridOutline,
+  listOutline,
+} from "ionicons/icons";
 import { useRouter } from "vue-router";
 import { useAlbums, DEFAULT_ALBUM_ID } from "@/composables/useAlbums";
 import type { Album } from "@/composables/useAlbums";
@@ -240,15 +264,41 @@ const confirmDeleteAlbum = async (album: Album) => {
   font-size: 24px;
   color: var(--ion-color-medium);
 }
+.album-row {
+  display: block;
+  margin: 6px 12px;
+  border-radius: var(--app-radius-md);
+  overflow: hidden;
+}
+.album-row ion-item {
+  --border-radius: var(--app-radius-md);
+}
+.album-list-thumb {
+  --border-radius: var(--app-radius-sm);
+  --size: 48px;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
+.row-menu-button {
+  --background: color-mix(in srgb, currentColor 7%, transparent);
+  --background-hover: color-mix(in srgb, currentColor 14%, transparent);
+  --border-radius: var(--app-radius-sm);
+  --color: var(--ion-color-medium);
+  --padding-start: 6px;
+  --padding-end: 6px;
+  width: 32px;
+  height: 32px;
+  margin: 0 4px 0 0;
+}
 .album-card {
   user-select: none;
   -webkit-user-select: none;
 }
 .album-thumb {
+  position: relative;
   aspect-ratio: 1;
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--ion-color-light);
+  border-radius: var(--app-radius-md);
+  background: var(--ion-item-background);
+  box-shadow: var(--app-shadow-card);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -257,9 +307,27 @@ const confirmDeleteAlbum = async (album: Album) => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: inherit;
 }
 .album-thumb .thumb-placeholder {
   font-size: 40px;
+}
+.card-menu-button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  margin: 0;
+  --padding-start: 4px;
+  --padding-end: 4px;
+  --background: rgba(0, 0, 0, 0.45);
+  --background-hover: rgba(0, 0, 0, 0.6);
+  --border-radius: 50%;
+  --border-width: 1px;
+  --border-style: solid;
+  --border-color: rgba(255, 255, 255, 0.25);
+  --color: #fff;
+  width: 28px;
+  height: 28px;
 }
 .album-name {
   margin-top: 6px;
