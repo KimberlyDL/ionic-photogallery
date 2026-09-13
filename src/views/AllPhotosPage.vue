@@ -15,12 +15,7 @@
 
       <CameraComponent />
 
-      <PhotoGalleryComponent
-        :photos="galleryPhotos"
-        @delete="handleDelete"
-        @edit-caption="handleEditCaption"
-        @move-to-album="handleMoveToAlbum"
-      />
+      <PhotoGalleryComponent :photos="galleryPhotos" />
     </ion-content>
   </ion-page>
 </template>
@@ -35,47 +30,24 @@ import {
   IonContent,
   IonRefresher,
   IonRefresherContent,
-  actionSheetController,
 } from "@ionic/vue";
 import type { RefresherCustomEvent } from "@ionic/vue";
 import CameraComponent from "@/components/CameraComponent.vue";
 import PhotoGalleryComponent from "@/components/PhotoGalleryComponent.vue";
 import { usePhotoGallery } from "@/composables/usePhotoGallery";
-import { useAlbums } from "@/composables/useAlbums";
 import type { GalleryPhoto } from "@/types/gallery";
 
-const { photos, deletePhotos, updateCaption, moveToAlbum } = usePhotoGallery();
-const { albums } = useAlbums();
+const { photos } = usePhotoGallery();
 
 const galleryPhotos = computed<GalleryPhoto[]>(() =>
   photos.value
     .filter((p) => !!p.webviewPath)
-    .map((p) => ({ id: p.id, url: p.webviewPath!, caption: p.caption }))
+    .map((p) => ({ id: p.id, url: p.webviewPath!, name: p.name, size: p.size, createdAt: p.createdAt, albumId: p.albumId }))
 );
 
 const handleRefresh = (event: RefresherCustomEvent) => {
   // Data is realtime via Firebase listeners; nothing to fetch, just acknowledge the gesture.
   event.target.complete();
-};
-
-const handleDelete = (ids: string[]) => deletePhotos(ids);
-const handleEditCaption = (id: string, caption: string) => updateCaption(id, caption);
-
-const handleMoveToAlbum = async (ids: string[]) => {
-  const buttons = [
-    ...albums.value.map((album) => ({
-      text: album.name,
-      handler: () => moveToAlbum(ids, album.id),
-    })),
-    { text: "No Album (Unfiled)", handler: () => moveToAlbum(ids, undefined) },
-    { text: "Cancel", role: "cancel" as const },
-  ];
-
-  const sheet = await actionSheetController.create({
-    header: "Move to Album",
-    buttons,
-  });
-  await sheet.present();
 };
 </script>
 

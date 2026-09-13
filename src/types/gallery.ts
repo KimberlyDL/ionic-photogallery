@@ -1,6 +1,8 @@
 export interface GalleryPhoto {
   id: string;
   url: string;
-  caption?: string;
-  synced?: boolean;
+  name: string;
+  size: number;
+  createdAt: number;
+  albumId?: string;
 }

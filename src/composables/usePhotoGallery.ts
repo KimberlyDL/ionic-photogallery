@@ -10,7 +10,8 @@ export interface UserPhoto {
   id: string;
   filepath: string;
   webviewPath?: string;
-  caption?: string;
+  name: string;
+  size: number;
   albumId?: string;
   createdAt: number;
 }
@@ -75,7 +76,20 @@ const convertBlobToBase64 = (blob: Blob) =>
     reader.readAsDataURL(blob);
   });
 
-const saveImageFile = async (photo: Photo, fileName: string): Promise<string> => {
+const pad = (n: number) => String(n).padStart(2, "0");
+
+const generateFileName = (date: Date) => {
+  const stamp = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(
+    date.getHours()
+  )}${pad(date.getMinutes())}${pad(date.getSeconds())}${pad(date.getMilliseconds() % 100)}`;
+  const uniqueSuffix = Math.floor(Math.random() * 900 + 100);
+  return `IMG_${stamp}_${uniqueSuffix}.jpeg`;
+};
+
+const saveImageFile = async (
+  photo: Photo,
+  fileName: string
+): Promise<{ filepath: string; size: number }> => {
   let base64Data: string;
 
   if (Capacitor.getPlatform() !== "web") {
@@ -93,7 +107,18 @@ const saveImageFile = async (photo: Photo, fileName: string): Promise<string> =>
     directory: Directory.Data,
   });
 
-  return Capacitor.getPlatform() === "web" ? fileName : savedFile.uri;
+  let size = 0;
+  try {
+    const stat = await Filesystem.stat({ path: fileName, directory: Directory.Data });
+    size = stat.size;
+  } catch {
+    // best-effort; details view will just show an unknown size
+  }
+
+  return {
+    filepath: Capacitor.getPlatform() === "web" ? fileName : savedFile.uri,
+    size,
+  };
 };
 
 const requireUid = () => {
@@ -111,15 +136,17 @@ export function usePhotoGallery() {
       quality: 90,
     });
 
-    const fileName = `${Date.now()}.jpeg`;
-    const filepath = await saveImageFile(capturedPhoto, fileName);
+    const now = new Date();
+    const fileName = generateFileName(now);
+    const { filepath, size } = await saveImageFile(capturedPhoto, fileName);
 
     const newRef = push(dbRef(db, `photos/${uid}`));
     await set(newRef, {
       filepath,
-      caption: "",
+      size,
+      name: now.toLocaleString(),
       albumId: null,
-      createdAt: Date.now(),
+      createdAt: now.getTime(),
     });
   };
 
@@ -143,9 +170,9 @@ export function usePhotoGallery() {
 
   const deletePhoto = (id: string) => deletePhotos([id]);
 
-  const updateCaption = async (id: string, caption: string) => {
+  const renamePhoto = async (id: string, name: string) => {
     const uid = requireUid();
-    await update(dbRef(db, `photos/${uid}/${id}`), { caption });
+    await update(dbRef(db, `photos/${uid}/${id}`), { name });
   };
 
   const moveToAlbum = async (ids: string[], albumId?: string) => {
@@ -168,7 +195,7 @@ export function usePhotoGallery() {
     takePhoto,
     deletePhoto,
     deletePhotos,
-    updateCaption,
+    renamePhoto,
     moveToAlbum,
     unassignAlbum,
   };

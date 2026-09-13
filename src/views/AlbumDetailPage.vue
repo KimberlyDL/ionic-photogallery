@@ -6,7 +6,7 @@
           <ion-back-button default-href="/tabs/albums" text="" />
         </ion-buttons>
         <ion-title>
-          {{ albumName }}
+          {{ albumTitle }}
           <span class="header-count">{{ albumPhotos.length }}</span>
         </ion-title>
       </ion-toolbar>
@@ -16,12 +16,9 @@
         <ion-refresher-content />
       </ion-refresher>
 
-      <PhotoGalleryComponent
-        :photos="albumPhotos"
-        @delete="handleDelete"
-        @edit-caption="handleEditCaption"
-        @move-to-album="handleMoveToAlbum"
-      />
+      <CameraComponent />
+
+      <PhotoGalleryComponent :photos="albumPhotos" :current-album-id="albumId" />
     </ion-content>
   </ion-page>
 </template>
@@ -38,54 +35,33 @@ import {
   IonBackButton,
   IonRefresher,
   IonRefresherContent,
-  actionSheetController,
 } from "@ionic/vue";
 import type { RefresherCustomEvent } from "@ionic/vue";
 import { useRoute } from "vue-router";
+import CameraComponent from "@/components/CameraComponent.vue";
 import PhotoGalleryComponent from "@/components/PhotoGalleryComponent.vue";
 import { usePhotoGallery } from "@/composables/usePhotoGallery";
-import { useAlbums } from "@/composables/useAlbums";
+import { useAlbums, DEFAULT_ALBUM_ID } from "@/composables/useAlbums";
 import type { GalleryPhoto } from "@/types/gallery";
 
 const route = useRoute();
 const albumId = computed(() => route.params.id as string);
 
-const { photos, deletePhotos, updateCaption, moveToAlbum } = usePhotoGallery();
-const { albums } = useAlbums();
+const { photos } = usePhotoGallery();
+const { albumName } = useAlbums();
 
-const albumName = computed(
-  () => albums.value.find((a) => a.id === albumId.value)?.name ?? "Album"
-);
+const albumTitle = computed(() => albumName(albumId.value === DEFAULT_ALBUM_ID ? undefined : albumId.value));
 
 const albumPhotos = computed<GalleryPhoto[]>(() =>
   photos.value
-    .filter((p) => p.albumId === albumId.value && !!p.webviewPath)
-    .map((p) => ({ id: p.id, url: p.webviewPath!, caption: p.caption }))
+    .filter((p) => (albumId.value === DEFAULT_ALBUM_ID ? !p.albumId : p.albumId === albumId.value))
+    .filter((p) => !!p.webviewPath)
+    .map((p) => ({ id: p.id, url: p.webviewPath!, name: p.name, size: p.size, createdAt: p.createdAt, albumId: p.albumId }))
 );
 
 const handleRefresh = (event: RefresherCustomEvent) => {
   // Data is realtime via Firebase listeners; nothing to fetch, just acknowledge the gesture.
   event.target.complete();
-};
-
-const handleDelete = (ids: string[]) => deletePhotos(ids);
-const handleEditCaption = (id: string, caption: string) => updateCaption(id, caption);
-
-const handleMoveToAlbum = async (ids: string[]) => {
-  const buttons = [
-    ...albums.value.map((album) => ({
-      text: album.name,
-      handler: () => moveToAlbum(ids, album.id),
-    })),
-    { text: "No Album (Unfiled)", handler: () => moveToAlbum(ids, undefined) },
-    { text: "Cancel", role: "cancel" as const },
-  ];
-
-  const sheet = await actionSheetController.create({
-    header: "Move to Album",
-    buttons,
-  });
-  await sheet.present();
 };
 </script>
 
